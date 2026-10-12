@@ -1,4 +1,6 @@
-// Projeto Supabase "meu-dinheiro".
-// A chave "publishable" é pública por desenho; quem protege os dados é o login + RLS.
-window.SUPABASE_URL = 'https://lxdjrwuwunkbwoytlszn.supabase.co';
-window.SUPABASE_KEY = 'sb_publishable_z58OxoOEMGu8dPQyoApOAQ_81vUoNoe';
+// Login/nuvem DESLIGADOS por enquanto: o app abre direto e guarda os dados no aparelho.
+// Para ligar o Supabase de novo, troque as duas linhas abaixo pelos valores comentados.
+window.SUPABASE_URL = '';
+window.SUPABASE_KEY = '';
+// window.SUPABASE_URL = 'https://lxdjrwuwunkbwoytlszn.supabase.co';
+// window.SUPABASE_KEY = 'sb_publishable_z58OxoOEMGu8dPQyoApOAQ_81vUoNoe';
