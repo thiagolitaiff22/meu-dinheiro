@@ -52,6 +52,13 @@ function carregar() {
   try { return Object.assign(vazio(), JSON.parse(localStorage.getItem(KEY))); } catch (e) { return vazio(); }
 }
 let S = carregar();
+if (!S.seeded) {
+  if (!S.contas.some(c => c.nome === 'Carro')) {
+    S.contas.push({ id: uid(), nome: 'Carro', valor: 1720, dia: 10, forma: 'boleto', categoria: 'Transporte', pagos: {} });
+  }
+  S.seeded = true;
+  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
+}
 let tab = 'inicio';
 let mes = hoje().slice(0, 7);
 
