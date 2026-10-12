@@ -46,7 +46,7 @@ const catBubble = c => {
 const soma = (arr, f) => arr.reduce((t, x) => t + f(x), 0);
 
 /* ---------- estado ---------- */
-const vazio = () => ({ renda: 0, gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
+const vazio = () => ({ renda: 0, saldoInicial: 0, gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
 const FORMAS = { boleto: 'Boleto', pix: 'Pix', cartao: 'Cartão', debito: 'Débito automático', dinheiro: 'Dinheiro' };
 function carregar() {
   try { return Object.assign(vazio(), JSON.parse(localStorage.getItem(KEY))); } catch (e) { return vazio(); }
@@ -271,6 +271,24 @@ const gastosDoMes = () => S.gastos.filter(g => g.data.startsWith(mes));
 const restante = d => Math.max(0, d.total - soma(d.pagamentos || [], p => p.valor));
 const dividasAbertas = () => S.dividas.filter(d => restante(d) > 0.004).sort((a, b) => restante(a) - restante(b));
 
+// Saldo = dinheiro informado + entradas - todos os gastos lançados (excluir um gasto devolve o valor).
+const saldoAtual = () => (S.saldoInicial || 0) - soma(S.gastos, g => g.valor);
+function formSaldo() {
+  sheet('Ajustar saldo',
+    `<div class="mute">Quanto você tem disponível agora?</div>` + campo('Saldo atual (R$)', 'valor', { mode: 'decimal', value: String(Math.round(saldoAtual() * 100) / 100).replace('.', ',') }),
+    f => {
+      S.saldoInicial = num(f.valor) + soma(S.gastos, g => g.valor);
+      toast('Saldo ajustado');
+    });
+}
+function formEntrada() {
+  sheet('Entrou dinheiro', campo('Valor (R$)', 'valor', { mode: 'decimal', ph: '0,00' }), f => {
+    const v = num(f.valor);
+    if (v <= 0) { toast('Informe um valor'); return false; }
+    S.saldoInicial = (S.saldoInicial || 0) + v;
+    toast(`+${R(v)} no saldo`);
+  }, 'Adicionar');
+}
 const paga = c => !!(c.pagos && c.pagos[mes]);
 const ehFixo = g => g.custo === 'fixo' || !!g.conta;
 function contaStatus(c) {
@@ -290,7 +308,7 @@ function vInicio() {
   const total = soma(g, x => x.valor);
   const bes = soma(g.filter(x => x.tipo === 'besteira'), x => x.valor);
   const cor = soma(g.filter(x => x.tipo === 'cortavel'), x => x.valor);
-  const sobra = S.renda - total;
+  const saldo = saldoAtual();
   const fixo = soma(g.filter(ehFixo), x => x.valor), variavel = total - fixo;
   const previstoFixo = soma(S.contas.filter(c => !paga(c)), c => c.valor);
   const abertas = dividasAbertas();
@@ -298,10 +316,11 @@ function vInicio() {
 
   let h = `<header class="hero"><div class="row between"><div><div class="hi">Olá!</div><div class="sub">Seu dinheiro em ${esc(mesNome(mes))}</div></div>${gearBtn()}</div>
     ${mnav()}
-    <div class="hl">Saldo do mês</div>
-    <div class="hbig ${sobra < 0 ? 'neg' : ''}">${R(sobra)}</div>
-    ${S.renda ? bar(total / S.renda * 100) : '<div class="sub" style="margin-top:6px">Defina sua renda em ⚙ para ver quanto sobra.</div>'}
-    <div class="pills"><div class="pill"><span>Renda</span><b>${R(S.renda)}</b></div><div class="pill"><span>Gastos</span><b>${R(total)}</b></div></div>
+    <div class="hl">Saldo disponível</div>
+    <div class="hbig ${saldo < 0 ? 'neg' : ''}">${R(saldo)}</div>
+    <div class="sub" style="margin-top:2px">Cada conta paga ou gasto lançado desconta daqui.</div>
+    <div class="pills"><div class="pill"><span>Gastos no mês</span><b>−${R(total)}</b></div><div class="pill"><span>Contas a pagar</span><b>${R(previstoFixo)}</b></div></div>
+    <div class="row" style="margin-top:12px"><button class="hbtn" data-act="entrada">+ Entrou dinheiro</button><button class="hbtn" data-act="ajustarSaldo">Ajustar saldo</button></div>
   </header><!--w-->`;
 
   if (bes + cor > 0) {
@@ -332,7 +351,7 @@ function vInicio() {
 
   if (S.contas.length) {
     const pc = S.contas.filter(c => !paga(c));
-    h += `<div class="card" data-act="ir" data-tab="dividas"><div class="row between"><div><div class="mute">Contas fixas a pagar</div><div class="big">${R(soma(pc, c => c.valor))}</div></div><div class="mute">${pc.length} pendente(s) ›</div></div></div>`;
+    h += `<div class="card" data-act="ir" data-tab="mensal"><div class="row between"><div><div class="mute">Contas fixas a pagar</div><div class="big">${R(soma(pc, c => c.valor))}</div></div><div class="mute">${pc.length} pendente(s) ›</div></div></div>`;
   }
   h += `<div class="card" data-act="ir" data-tab="dividas"><div class="row between"><div><div class="mute">Dívidas em aberto</div><div class="big">${R(totalDiv)}</div></div><div class="mute">${abertas.length} dívida(s) ›</div></div></div>`;
 
@@ -427,11 +446,10 @@ function formPagamento(id) {
       toast(restante(d) <= 0.004 ? 'Dívida quitada! Parabéns!' : 'Pagamento registrado');
     });
 }
-function vDividas() {
-  const todas = [...S.dividas].sort((a, b) => restante(a) - restante(b));
-  const abertas = dividasAbertas();
+
+function blocoContas() {
   const pend = S.contas.filter(c => !paga(c));
-  let h = heroSmall('Contas e dívidas', mnav());
+  let h = '';
   h += `<div class="card"><div class="row between"><h2 style="margin:0">Contas fixas do mês</h2><button class="btn small" data-act="novaConta">Nova conta</button></div>`;
   if (!S.contas.length) h += `<div class="empty">Cadastre contas que se repetem todo mês (carro, aluguel, internet...).</div>`;
   else h += `<div class="mute" style="margin-top:6px">A pagar: <b>${R(soma(pend, c => c.valor))}</b> em ${pend.length} conta(s)</div>`;
@@ -442,6 +460,42 @@ function vDividas() {
       <div class="row" style="width:100%">${paga(c) ? `<button class="btn small ghost" data-act="desfazerConta" data-id="${c.id}">Desfazer pagamento</button>` : `<button class="btn small" data-act="pagarConta" data-id="${c.id}">Marcar como paga</button>`}<button class="btn small danger" data-act="delConta" data-id="${c.id}">Excluir</button></div></div>`;
   });
   h += `</div>`;
+  return h;
+}
+
+function vMensal() {
+  const g = gastosDoMes();
+  const porCat = {};
+  g.forEach(x => porCat[x.categoria] = (porCat[x.categoria] || 0) + x.valor);
+  const pend = S.contas.filter(c => !paga(c));
+  let h = heroSmall('Mensal', mnav());
+  h += blocoContas();
+
+  const linhas = CATS.map(([, nome]) => ({
+    nome, gasto: porCat[nome] || 0, lim: S.orcamentos[nome] || 0,
+    contas: S.contas.filter(c => (c.categoria || 'Outros') === nome).sort((a, b) => a.dia - b.dia)
+  })).filter(l => l.gasto > 0 || l.lim > 0 || l.contas.length);
+
+  h += `<div class="card"><h2>Categorias do mês</h2>`;
+  if (!linhas.length) h += `<div class="empty">Sem movimento neste mês.<br>Lance gastos ou cadastre contas fixas.</div>`;
+  linhas.forEach(l => {
+    h += `<div style="padding:10px 0;border-top:1px solid var(--line)"><div class="row between"><span class="row grow" style="gap:10px">${catBubble(l.nome)}${esc(l.nome)}</span>
+      <span style="text-align:right;white-space:nowrap"><b class="neg">−${R(l.gasto)}</b>${l.lim ? `<div class="mute" style="font-size:12px">limite ${R(l.lim)}</div>` : ''}</span></div>
+      ${l.lim ? bar(l.gasto / l.lim * 100) : ''}`;
+    l.contas.forEach(c => {
+      const st = contaStatus(c);
+      h += `<div class="row between mute" style="font-size:13px;margin-top:6px"><span>${esc(c.nome)} · sai dia ${p2(c.dia)} · ${esc(FORMAS[c.forma] || '')}</span><span class="${st.cls}">${esc(st.t)}</span></div>`;
+    });
+    h += `</div>`;
+  });
+  h += `</div>`;
+  return h;
+}
+
+function vDividas() {
+  const todas = [...S.dividas].sort((a, b) => restante(a) - restante(b));
+  const abertas = dividasAbertas();
+  let h = heroSmall('Dívidas');
   h += `<div class="card"><div class="mute">Total a pagar</div><div class="big">${R(soma(abertas, restante))}</div>
     <div class="mute">Parcelas somam ${R(soma(abertas, d => d.parcela))} por mês</div></div>`;
   if (abertas.length > 1) {
@@ -518,7 +572,7 @@ function vMais() {
 }
 
 /* ---------- render e eventos ---------- */
-const VIEWS = { inicio: vInicio, gastos: vGastos, dividas: vDividas, metas: vMetas, mais: vMais };
+const VIEWS = { inicio: vInicio, gastos: vGastos, mensal: vMensal, dividas: vDividas, metas: vMetas, mais: vMais };
 function render() {
   const y = window.scrollY;
   const [topo, corpo] = VIEWS[tab]().split('<!--w-->');
@@ -530,7 +584,7 @@ function ir(t) { tab = t; render(); window.scrollTo(0, 0); }
 
 document.querySelector('.tabbar').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  if (b.hasAttribute('data-add')) { ({ dividas: formDivida, metas: formMeta }[tab] || formGasto)(); return; }
+  if (b.hasAttribute('data-add')) { ({ mensal: formConta, dividas: formDivida, metas: formMeta }[tab] || formGasto)(); return; }
   ir(b.dataset.tab);
 });
 
@@ -544,6 +598,8 @@ $('#app').addEventListener('click', async e => {
     case 'ir': ir(el.dataset.tab); break;
     case 'novoGasto': formGasto(); break;    case 'novaDivida': formDivida(); break;
     case 'novaConta': formConta(); break;
+    case 'ajustarSaldo': formSaldo(); break;
+    case 'entrada': formEntrada(); break;
     case 'sair':
       if (await confirmar('Sair da conta? Seus dados continuam na nuvem.', 'Sair')) {
         await sb.auth.signOut(); try { localStorage.removeItem(KEY); } catch (_) {}

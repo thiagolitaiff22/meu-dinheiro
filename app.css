@@ -27,6 +27,7 @@ h2{font-size:17px;margin:0 0 10px}
 .hero .mnav button{background:rgba(255,255,255,.14);border-color:transparent;color:#fff}
 .hero .bar{background:rgba(255,255,255,.18);margin:12px 0 0}
 .hero .bar i{background:#fff}.hero .bar.over i{background:#ffb4a2}.hero .bar.warn i{background:#ffd48a}
+.hbtn{background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:12px;padding:8px 12px;font-size:13px;font-weight:600}
 .gear{background:rgba(255,255,255,.14);border:0;color:#fff;width:40px;height:40px;border-radius:14px;display:grid;place-items:center}
 .gear svg{width:20px;height:20px}
 .pills{display:flex;gap:10px;margin-top:16px}
