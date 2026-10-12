@@ -18,7 +18,11 @@ const ICONS = {
   mic: '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
   camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
-  check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'
+  check: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+  arrowup: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  arrowdown: '<path d="M12 5v14M5 12l7 7 7-7"/>',
+  trend: '<path d="M3 7l6 6 4-4 8 8"/><path d="M15 17h6v-6"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>'
 };
 const ic = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`;
 const CATS = [['utensils','Alimentação','#e8590c'],['cart','Mercado','#2f9e44'],['car','Transporte','#1c7ed6'],['home','Moradia','#7048e8'],['heart','Saúde','#e03131'],['book','Educação','#0c8599'],['game','Lazer','#d6336c'],['shirt','Roupas','#9c36b5'],['repeat','Assinaturas','#3b5bdb'],['bag','Bares e delivery','#f08c00'],['tag','Outros','#5c7080']];
@@ -46,7 +50,7 @@ const catBubble = c => {
 const soma = (arr, f) => arr.reduce((t, x) => t + f(x), 0);
 
 /* ---------- estado ---------- */
-const vazio = () => ({ renda: 0, saldoInicial: 0, gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
+const vazio = () => ({ renda: 0, saldoInicial: 0, entradas: [], gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
 const FORMAS = { boleto: 'Boleto', pix: 'Pix', cartao: 'Cartão', debito: 'Débito automático', dinheiro: 'Dinheiro' };
 function carregar() {
   try { return Object.assign(vazio(), JSON.parse(localStorage.getItem(KEY))); } catch (e) { return vazio(); }
@@ -272,20 +276,24 @@ const restante = d => Math.max(0, d.total - soma(d.pagamentos || [], p => p.valo
 const dividasAbertas = () => S.dividas.filter(d => restante(d) > 0.004).sort((a, b) => restante(a) - restante(b));
 
 // Saldo = dinheiro informado + entradas - todos os gastos lançados (excluir um gasto devolve o valor).
-const saldoAtual = () => (S.saldoInicial || 0) - soma(S.gastos, g => g.valor);
+const saldoAtual = () => (S.saldoInicial || 0) + soma(S.entradas || [], e => e.valor) - soma(S.gastos, g => g.valor);
 function formSaldo() {
   sheet('Ajustar saldo',
     `<div class="mute">Quanto você tem disponível agora?</div>` + campo('Saldo atual (R$)', 'valor', { mode: 'decimal', value: String(Math.round(saldoAtual() * 100) / 100).replace('.', ',') }),
     f => {
-      S.saldoInicial = num(f.valor) + soma(S.gastos, g => g.valor);
+      S.saldoInicial = num(f.valor) + soma(S.gastos, g => g.valor) - soma(S.entradas || [], e => e.valor);
       toast('Saldo ajustado');
     });
 }
 function formEntrada() {
-  sheet('Entrou dinheiro', campo('Valor (R$)', 'valor', { mode: 'decimal', ph: '0,00' }), f => {
+  sheet('Entrou dinheiro',
+    campo('Valor (R$)', 'valor', { mode: 'decimal', ph: '0,00' }) +
+    campo('Descrição', 'descricao', { ph: 'Ex.: salário, pix recebido...' }) +
+    campo('Data', 'data', { type: 'date', value: hoje() }), f => {
     const v = num(f.valor);
     if (v <= 0) { toast('Informe um valor'); return false; }
-    S.saldoInicial = (S.saldoInicial || 0) + v;
+    S.entradas = S.entradas || [];
+    S.entradas.push({ id: uid(), valor: v, descricao: f.descricao.trim() || 'Entrada', data: f.data || hoje() });
     toast(`+${R(v)} no saldo`);
   }, 'Adicionar');
 }
@@ -314,14 +322,29 @@ function vInicio() {
   const abertas = dividasAbertas();
   const totalDiv = soma(abertas, restante);
 
-  let h = `<header class="hero"><div class="row between"><div class="hl" style="margin:0">Saldo disponível</div>${gearBtn()}</div>
-    <div class="hbig ${saldo < 0 ? 'neg' : ''}">${R(saldo)}</div>
-    <div class="row" style="margin-top:10px"><button class="hbtn" data-act="entrada">+ Entrou dinheiro</button><button class="hbtn" data-act="ajustarSaldo">Ajustar saldo</button></div>
-  </header><!--w-->`;
-  h += mnav();
-  h += `<div class="grid2"><div class="mini"><span>Gastos no mês</span><b class="neg">−${R(total)}</b></div><div class="mini" data-act="ir" data-tab="mensal"><span>Contas a pagar</span><b>${R(previstoFixo)}</b></div></div>`;
-
+  const rec = soma((S.entradas || []).filter(e => e.data.startsWith(mes)), e => e.valor);
   const pc = S.contas.filter(c => !paga(c)).sort((a, b) => a.dia - b.dia);
+  const atras = pc.filter(c => contaStatus(c).t.startsWith('Atrasada'));
+  const media = S.metas.length ? Math.round(soma(S.metas, m => m.alvo ? m.atual / m.alvo * 100 : 0) / S.metas.length) : 0;
+
+  let h = `<header class="hero center">
+    <div class="row between"><span style="width:40px"></span><div class="mcenter"><button data-act="mes" data-n="-1" aria-label="Mês anterior">‹</button><b>${esc(mesNome(mes))}</b><button data-act="mes" data-n="1" aria-label="Próximo mês">›</button></div>${gearBtn()}</div>
+    <div class="hl">Saldo atual</div>
+    <div class="hbig ${saldo < 0 ? 'neg' : ''}">${R(saldo)}</div>
+    <div class="rd">
+      <div class="row" style="gap:10px"><span class="circ up">${ic('arrowup')}</span><div><div class="hl2">Receitas</div><b class="rec">${R(rec)}</b></div></div>
+      <div class="row" style="gap:10px"><span class="circ down">${ic('arrowdown')}</span><div><div class="hl2">Despesas</div><b class="des">${R(total)}</b></div></div>
+    </div>
+    <div class="row" style="margin-top:12px;justify-content:center"><button class="hbtn" data-act="entrada">+ Entrou dinheiro</button><button class="hbtn" data-act="ajustarSaldo">Ajustar saldo</button></div>
+  </header><!--w-->`;
+
+  h += `<div class="sec">Pendências e alertas</div><div class="hscroll">
+    <div class="pcard" data-act="ir" data-tab="mensal"><div class="row between"><span class="pico">${ic('arrowdown')}</span><span class="badge ${pc.length ? 'bad' : ''}">${pc.length}</span></div><div class="mute">Contas a pagar</div><b>${R(previstoFixo)}</b></div>
+    <div class="pcard" data-act="ir" data-tab="mensal"><div class="row between"><span class="pico">${ic('alert')}</span><span class="badge ${atras.length ? 'bad' : ''}">${atras.length}</span></div><div class="mute">Atrasadas</div><b class="${atras.length ? 'neg' : ''}">${R(soma(atras, c => c.valor))}</b></div>
+    <div class="pcard" data-act="ir" data-tab="dividas"><div class="row between"><span class="pico">${ic('trend')}</span><span class="badge">${abertas.length}</span></div><div class="mute">Dívidas em aberto</div><b>${R(totalDiv)}</b></div>
+    <div class="pcard" data-act="ir" data-tab="metas"><div class="row between"><span class="pico">${ic('target')}</span><span class="badge">${S.metas.length}</span></div><div class="mute">Metas</div><b>${S.metas.length ? media + '%' : '—'}</b></div>
+  </div>`;
+
   h += `<div class="card" data-act="ir" data-tab="mensal"><div class="row between"><h2 style="margin:0">Próximos vencimentos</h2><span class="mute">ver todas ›</span></div>`;
   if (!pc.length) h += `<div class="mute" style="margin-top:6px">${S.contas.length ? 'Tudo pago neste mês.' : 'Nenhuma conta fixa cadastrada.'}</div>`;
   pc.slice(0, 4).forEach(c => {
@@ -348,11 +371,8 @@ function vInicio() {
     const lim = S.orcamentos[c] || 0;
     h += `<div class="item" style="flex-wrap:wrap"><span class="row grow" style="gap:10px">${catBubble(c)}${esc(c)}</span><span style="text-align:right;white-space:nowrap"><b>${R(v)}</b>${lim ? `<span class="mute" style="font-size:12px"> / ${R(lim)}</span>` : ''}</span>${lim ? `<div style="width:100%">${bar(v / lim * 100)}</div>` : ''}</div>`;
   });
-  if (cats.length > 5) h += `<div class="mute" style="font-size:12px;text-align:center" data-act="ir" data-tab="mensal">+${cats.length - 5} categorias na aba Mensal ›</div>`;
+  if (cats.length > 5) h += `<div class="mute" style="font-size:12px;text-align:center" data-act="ir" data-tab="mensal">+${cats.length - 5} categorias em Planejamento ›</div>`;
   h += `</div>`;
-
-  const media = S.metas.length ? Math.round(soma(S.metas, m => m.alvo ? m.atual / m.alvo * 100 : 0) / S.metas.length) : 0;
-  h += `<div class="grid2"><div class="mini" data-act="ir" data-tab="dividas"><span>Dívidas em aberto</span><b>${R(totalDiv)}</b><span>${abertas.length} dívida(s) ›</span></div><div class="mini" data-act="ir" data-tab="metas"><span>Metas</span><b>${S.metas.length ? media + '%' : '—'}</b><span>${S.metas.length} meta(s) ›</span></div></div>`;
   return h;
 }
 
@@ -378,26 +398,34 @@ function formGasto() {
   ligarIA(el);
 }
 function vGastos() {
-  const g = gastosDoMes().sort((a, b) => b.data.localeCompare(a.data));
-  let h = heroSmall('Gastos', mnav());
-  const tFixo = soma(g.filter(ehFixo), x => x.valor), tTotal = soma(g, x => x.valor);
-  h += `<div class="card"><div class="row between"><span class="mute">Total do mês</span><b class="neg">−${R(tTotal)}</b></div>
+  const g = gastosDoMes();
+  const ent = (S.entradas || []).filter(e => e.data.startsWith(mes));
+  const itens = [...g.map(x => ({ ...x, k: 'g' })), ...ent.map(e => ({ ...e, k: 'e' }))].sort((a, b) => b.data.localeCompare(a.data));
+  let h = heroSmall('Transações', mnav());
+  const tFixo = soma(g.filter(ehFixo), x => x.valor), tTotal = soma(g, x => x.valor), tRec = soma(ent, e => e.valor);
+  h += `<div class="card"><div class="row between"><span class="mute">Receitas</span><b class="pos">+${R(tRec)}</b></div>
+    <div class="row between" style="margin-top:6px"><span class="mute">Despesas</span><b class="neg">−${R(tTotal)}</b></div>
     <div class="row between" style="margin-top:6px"><span class="mute">Custo fixo</span><span class="neg">−${R(tFixo)}</span></div>
     <div class="row between" style="margin-top:6px"><span class="mute">Custo variável</span><span class="neg">−${R(tTotal - tFixo)}</span></div></div>`;
-  if (!g.length) h += `<div class="empty">Nada lançado neste mês.</div>`;
+  if (!itens.length) h += `<div class="empty">Nada lançado neste mês.</div>`;
   let dia = '', aberto = false;
-  g.forEach(x => {
+  itens.forEach(x => {
     if (x.data !== dia) {
       if (aberto) h += `</div>`;
       dia = x.data; aberto = true;
       h += `<div class="day">${x.data.slice(8)}/${x.data.slice(5, 7)}</div><div class="card" style="padding:4px 14px">`;
     }
-    h += `<div class="item" data-act="delGasto" data-id="${x.id}">${catBubble(x.categoria)}
-      <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span>${ehFixo(x) ? '<span class="chip">Fixo</span>' : ''}</div></div>
-      <b class="neg">−${R(x.valor)}</b></div>`;
+    if (x.k === 'e') {
+      h += `<div class="item" data-act="delEntrada" data-id="${x.id}"><span class="emoji" style="color:#22a35a;background:color-mix(in srgb,#22a35a 14%,var(--card))">${ic('arrowup')}</span>
+        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">Receita</div></div><b class="pos">+${R(x.valor)}</b></div>`;
+    } else {
+      h += `<div class="item" data-act="delGasto" data-id="${x.id}">${catBubble(x.categoria)}
+        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span>${ehFixo(x) ? '<span class="chip">Fixo</span>' : ''}</div></div>
+        <b class="neg">−${R(x.valor)}</b></div>`;
+    }
   });
   if (aberto) h += `</div>`;
-  h += `<div class="mute" style="text-align:center">Toque em um gasto para excluir.</div>`;
+  h += `<div class="mute" style="text-align:center">Toque em um lançamento para excluir.</div>`;
   return h;
 }
 
@@ -546,7 +574,11 @@ function vMetas() {
 }
 
 function vMais() {
-  let h = heroSmall('Configurações');
+  let h = heroSmall('Mais');
+  h += `<div class="card" style="padding:2px 12px">
+    <div class="item" data-act="ir" data-tab="dividas"><span class="emoji" style="color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--card))">${ic('trend')}</span><div class="grow"><b>Dívidas</b><div class="mute" style="font-size:12px">Quanto falta e ordem de quitação</div></div><span class="mute">›</span></div>
+    <div class="item" data-act="ir" data-tab="metas"><span class="emoji" style="color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--card))">${ic('target')}</span><div class="grow"><b>Metas</b><div class="mute" style="font-size:12px">Quanto já juntou e quanto falta</div></div><span class="mute">›</span></div>
+  </div>`;
   h += `<div class="card"><h2>Renda mensal</h2><div class="row between"><span class="mute">Quanto entra por mês</span><input class="plain" inputmode="decimal" data-act="renda" value="${S.renda ? String(S.renda).replace('.', ',') : ''}" placeholder="0,00"></div></div>`;
   h += `<div class="card"><h2>Limite por categoria</h2><div class="mute" style="margin-bottom:6px">Deixe em branco para não limitar.</div>`;
   CATS.forEach(([, c]) => {
@@ -570,7 +602,7 @@ function render() {
   const y = window.scrollY;
   const [topo, corpo] = VIEWS[tab]().split('<!--w-->');
   $('#app').innerHTML = `${topo}<div class="wrap">${corpo}</div>`;
-  document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  document.querySelectorAll('.tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab || (b.dataset.tab === 'mais' && (tab === 'dividas' || tab === 'metas'))));
   window.scrollTo(0, y);
 }
 function ir(t) { tab = t; render(); window.scrollTo(0, 0); }
@@ -592,6 +624,11 @@ $('#app').addEventListener('click', async e => {
     case 'novoGasto': formGasto(); break;    case 'novaDivida': formDivida(); break;
     case 'novaConta': formConta(); break;
     case 'ajustarSaldo': formSaldo(); break;
+    case 'delEntrada': {
+      const i = (S.entradas || []).findIndex(x => x.id === id), en = S.entradas[i];
+      if (en && await confirmar(`Excluir a receita "${en.descricao}" (${R(en.valor)})?`)) { S.entradas.splice(i, 1); salvar(); render(); }
+      break;
+    }
     case 'entrada': formEntrada(); break;
     case 'sair':
       if (await confirmar('Sair da conta? Seus dados continuam na nuvem.', 'Sair')) {
