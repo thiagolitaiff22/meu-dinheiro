@@ -1,4 +1,4 @@
-﻿const V = 'meudinheiro-v2';
+const V = 'meudinheiro-v4';
 const FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -10,7 +10,7 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    fetch(e.request).then(r => {
+    fetch(e.request, { cache: 'no-cache' }).then(r => {
       const copy = r.clone();
       caches.open(V).then(c => c.put(e.request, copy));
       return r;
