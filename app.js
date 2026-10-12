@@ -272,6 +272,7 @@ const restante = d => Math.max(0, d.total - soma(d.pagamentos || [], p => p.valo
 const dividasAbertas = () => S.dividas.filter(d => restante(d) > 0.004).sort((a, b) => restante(a) - restante(b));
 
 const paga = c => !!(c.pagos && c.pagos[mes]);
+const ehFixo = g => g.custo === 'fixo' || !!g.conta;
 function contaStatus(c) {
   if (paga(c)) return { t: 'Paga', cls: 'pos' };
   const [y, m] = mes.split('-').map(Number);
@@ -290,13 +291,15 @@ function vInicio() {
   const bes = soma(g.filter(x => x.tipo === 'besteira'), x => x.valor);
   const cor = soma(g.filter(x => x.tipo === 'cortavel'), x => x.valor);
   const sobra = S.renda - total;
+  const fixo = soma(g.filter(ehFixo), x => x.valor), variavel = total - fixo;
+  const previstoFixo = soma(S.contas.filter(c => !paga(c)), c => c.valor);
   const abertas = dividasAbertas();
   const totalDiv = soma(abertas, restante);
 
   let h = `<header class="hero"><div class="row between"><div><div class="hi">Olá!</div><div class="sub">Seu dinheiro em ${esc(mesNome(mes))}</div></div>${gearBtn()}</div>
     ${mnav()}
-    <div class="hl">${S.renda ? 'Sobra do mês' : 'Gasto no mês'}</div>
-    <div class="hbig ${S.renda && sobra < 0 ? 'neg' : ''}">${R(S.renda ? sobra : total)}</div>
+    <div class="hl">Saldo do mês</div>
+    <div class="hbig ${sobra < 0 ? 'neg' : ''}">${R(sobra)}</div>
     ${S.renda ? bar(total / S.renda * 100) : '<div class="sub" style="margin-top:6px">Defina sua renda em ⚙ para ver quanto sobra.</div>'}
     <div class="pills"><div class="pill"><span>Renda</span><b>${R(S.renda)}</b></div><div class="pill"><span>Gastos</span><b>${R(total)}</b></div></div>
   </header><!--w-->`;
@@ -313,11 +316,17 @@ function vInicio() {
   const porCat = {};
   g.forEach(x => porCat[x.categoria] = (porCat[x.categoria] || 0) + x.valor);
   const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
+  h += `<div class="card"><h2>Custo fixo × variável</h2>
+    <div class="row" style="gap:12px">
+      <div class="grow"><div class="mute">Fixo</div><div class="neg" style="font-size:18px;font-weight:700">−${R(fixo)}</div>${previstoFixo > 0 ? `<div class="mute" style="font-size:12px">ainda a pagar ${R(previstoFixo)}</div>` : ''}</div>
+      <div class="grow"><div class="mute">Variável</div><div class="neg" style="font-size:18px;font-weight:700">−${R(variavel)}</div></div>
+    </div>${total > 0 ? bar(fixo / total * 100) : ''}
+    <div class="mute" style="font-size:12px">${total > 0 ? `${Math.round(fixo / total * 100)}% do que você gastou é custo fixo` : 'Nenhum gasto neste mês'}</div></div>`;
   h += `<div class="card"><h2>Por categoria</h2>`;
   if (!cats.length) h += `<div class="empty">Nenhum gasto neste mês.<br>Toque em Gastos e adicione o primeiro.</div>`;
   cats.forEach(([c, v]) => {
     const lim = S.orcamentos[c] || 0;
-    h += `<div style="margin-bottom:10px"><div class="row between"><span class="row grow" style="gap:10px">${catBubble(c)}${esc(c)}</span><span style="text-align:right;white-space:nowrap"><b>${R(v)}</b>${lim ? `<div class="mute" style="font-size:13.5px">de ${R(lim)}</div>` : ''}</span></div>${lim ? bar(v / lim * 100) : ''}</div>`;
+    h += `<div style="margin-bottom:10px"><div class="row between"><span class="row grow" style="gap:10px">${catBubble(c)}${esc(c)}</span><span style="text-align:right;white-space:nowrap"><b>${R(v)}</b>${lim ? `<div class="mute" style="font-size:12px">de ${R(lim)}</div>` : ''}</span></div>${lim ? bar(v / lim * 100) : ''}</div>`;
   });
   h += `</div>`;
 
@@ -345,11 +354,12 @@ function formGasto() {
     campo('Descrição', 'descricao', { ph: 'Ex.: iFood, Uber, mercado...' }) +
     selecao('Categoria', 'categoria', CATS.map(c => [c[1], c[1]]), 'Alimentação') +
     selecao('Foi...', 'tipo', Object.entries(TIPOS), 'necessario') +
+    selecao('Custo', 'custo', [['variavel', 'Variável (muda todo mês)'], ['fixo', 'Fixo (igual todo mês)']], 'variavel') +
     campo('Data', 'data', { type: 'date', value: hoje() }),
     f => {
       const valor = num(f.valor);
       if (valor <= 0) { toast('Informe um valor'); return false; }
-      S.gastos.push({ id: uid(), valor, descricao: f.descricao.trim() || f.categoria, categoria: f.categoria, tipo: f.tipo, data: f.data || hoje() });
+      S.gastos.push({ id: uid(), valor, descricao: f.descricao.trim() || f.categoria, categoria: f.categoria, tipo: f.tipo, custo: f.custo || 'variavel', data: f.data || hoje() });
       if (!f.data || !f.data.startsWith(mes)) mes = (f.data || hoje()).slice(0, 7);
       toast('Gasto salvo');
     });
@@ -358,7 +368,10 @@ function formGasto() {
 function vGastos() {
   const g = gastosDoMes().sort((a, b) => b.data.localeCompare(a.data));
   let h = heroSmall('Gastos', mnav());
-  h += `<div class="card"><div class="row between"><span class="mute">Total do mês</span><b>${R(soma(g, x => x.valor))}</b></div></div>`;
+  const tFixo = soma(g.filter(ehFixo), x => x.valor), tTotal = soma(g, x => x.valor);
+  h += `<div class="card"><div class="row between"><span class="mute">Total do mês</span><b class="neg">−${R(tTotal)}</b></div>
+    <div class="row between" style="margin-top:6px"><span class="mute">Custo fixo</span><span class="neg">−${R(tFixo)}</span></div>
+    <div class="row between" style="margin-top:6px"><span class="mute">Custo variável</span><span class="neg">−${R(tTotal - tFixo)}</span></div></div>`;
   if (!g.length) h += `<div class="empty">Nada lançado neste mês.</div>`;
   let dia = '', aberto = false;
   g.forEach(x => {
@@ -368,8 +381,8 @@ function vGastos() {
       h += `<div class="day">${x.data.slice(8)}/${x.data.slice(5, 7)}</div><div class="card" style="padding:4px 14px">`;
     }
     h += `<div class="item" data-act="delGasto" data-id="${x.id}">${catBubble(x.categoria)}
-      <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span></div></div>
-      <b>${R(x.valor)}</b></div>`;
+      <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span>${ehFixo(x) ? '<span class="chip">Fixo</span>' : ''}</div></div>
+      <b class="neg">−${R(x.valor)}</b></div>`;
   });
   if (aberto) h += `</div>`;
   h += `<div class="mute" style="text-align:center">Toque em um gasto para excluir.</div>`;
@@ -425,7 +438,7 @@ function vDividas() {
   [...S.contas].sort((a, b) => a.dia - b.dia).forEach(c => {
     const st = contaStatus(c);
     h += `<div class="item" style="flex-wrap:wrap"><div class="grow"><b>${esc(c.nome)}</b><div class="mute">${esc(FORMAS[c.forma] || '')} · todo dia ${p2(c.dia)}</div></div>
-      <div style="text-align:right"><b>${R(c.valor)}</b><div class="${st.cls}" style="font-size:13.5px">${esc(st.t)}</div></div>
+      <div style="text-align:right"><b>${R(c.valor)}</b><div class="${st.cls}" style="font-size:12px">${esc(st.t)}</div></div>
       <div class="row" style="width:100%">${paga(c) ? `<button class="btn small ghost" data-act="desfazerConta" data-id="${c.id}">Desfazer pagamento</button>` : `<button class="btn small" data-act="pagarConta" data-id="${c.id}">Marcar como paga</button>`}<button class="btn small danger" data-act="delConta" data-id="${c.id}">Excluir</button></div></div>`;
   });
   h += `</div>`;
@@ -542,7 +555,7 @@ $('#app').addEventListener('click', async e => {
       const dia = Math.min(c.dia, 28);
       const g = { id: uid(), valor: c.valor, descricao: c.nome, categoria: c.categoria || 'Outros', tipo: 'necessario', data: hoje().startsWith(mes) ? hoje() : `${mes}-${p2(dia)}`, conta: c.id };
       S.gastos.push(g); c.pagos = c.pagos || {}; c.pagos[mes] = g.id;
-      salvar(); render(); toast('Conta paga e lançada nos gastos');
+      salvar(); render(); toast(`Paga: −${R(c.valor)} lançado nos gastos`);
       break;
     }
     case 'desfazerConta': {

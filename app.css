@@ -7,21 +7,21 @@
   :root{--bg:#070d1f;--card:#101a36;--ink:#e8edf9;--mute:#8e9bbb;--line:#1e2a4a;--brand:#5b8cff;--brand-ink:#06122b;--accent:#5b8cff;--bad:#fb923c;--warn:#fbbf24;--ok:#4ade80;--shadow:none}
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.45 "Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
 button,input,select,textarea{font-family:inherit}
 main{padding-bottom:calc(104px + env(safe-area-inset-bottom))}
 .wrap{max-width:640px;margin:0 auto;padding:16px}
-h1{font-size:27px;margin:0}
-h2{font-size:19px;margin:0 0 10px}
+h1{font-size:24px;margin:0}
+h2{font-size:17px;margin:0 0 10px}
 
 /* cabeçalho azul */
 .hero{background:linear-gradient(160deg,var(--navy2),var(--navy));color:#fff;padding:calc(env(safe-area-inset-top) + 16px) 20px 26px;border-radius:0 0 30px 30px}
 .hero>*{max-width:600px;margin-left:auto;margin-right:auto}
 .hero.small{padding-bottom:18px}
-.hero .hi{font-size:22.5px;font-weight:700}
-.hero .sub{font-size:14.5px;opacity:.75;text-transform:capitalize}
-.hero .hl{font-size:15.5px;opacity:.8;margin-top:14px}
-.hero .hbig{font-size:42.5px;font-weight:800;letter-spacing:-1px;line-height:1.15}
+.hero .hi{font-size:20px;font-weight:700}
+.hero .sub{font-size:13px;opacity:.75}
+.hero .hl{font-size:14px;opacity:.8;margin-top:14px}
+.hero .hbig{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1.15}
 .hero .hbig.neg{color:#ffb4a2}
 .hero .mnav{margin:14px auto 0}
 .hero .mnav button{background:rgba(255,255,255,.14);border-color:transparent;color:#fff}
@@ -31,18 +31,18 @@ h2{font-size:19px;margin:0 0 10px}
 .gear svg{width:20px;height:20px}
 .pills{display:flex;gap:10px;margin-top:16px}
 .pill{flex:1;background:rgba(255,255,255,.12);border-radius:18px;padding:10px 14px}
-.pill span{display:block;font-size:13.5px;opacity:.75}.pill b{font-size:18px}
+.pill span{display:block;font-size:12px;opacity:.75}.pill b{font-size:16px}
 
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow)}
-.big{font-size:33.5px;font-weight:700;letter-spacing:-.5px}
-.mute{color:var(--mute);font-size:15.5px}
+.big{font-size:30px;font-weight:700;letter-spacing:-.5px}
+.mute{color:var(--mute);font-size:14px}
 .pos{color:var(--ok)}.neg{color:var(--bad)}
 .row{display:flex;gap:10px;align-items:center}
 .between{justify-content:space-between}
 .grow{flex:1;min-width:0}
 .mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mnav b{text-transform:capitalize}
-.mnav button{background:var(--card);border:1px solid var(--line);color:var(--ink);width:40px;height:40px;border-radius:14px;font-size:20px}
+.mnav button{background:var(--card);border:1px solid var(--line);color:var(--ink);width:40px;height:40px;border-radius:14px;font-size:18px}
 .bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden;margin:8px 0 4px}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
 .bar.over i{background:var(--bad)}
@@ -54,19 +54,19 @@ h2{font-size:19px;margin:0 0 10px}
 .emoji .ic{width:22px;height:22px}
 .btn .ic{width:18px;height:18px;margin-right:6px;vertical-align:-4px}
 h2 .ic{width:20px;height:20px}
-.chip{display:inline-block;font-size:13.5px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px}
+.chip{display:inline-block;font-size:12px;padding:1px 8px;border-radius:99px;border:1px solid var(--line);color:var(--mute);margin-left:6px}
 .chip.besteira{color:var(--bad);border-color:var(--bad)}
 .chip.cortavel{color:var(--warn);border-color:var(--warn)}
-.day{font-size:14.5px;color:var(--mute);margin:14px 4px 6px;text-transform:uppercase;letter-spacing:.5px}
-.btn{background:var(--brand);color:var(--brand-ink);border:0;border-radius:14px;padding:12px 16px;font-size:18px;font-weight:600}
+.day{font-size:13px;color:var(--mute);margin:14px 4px 6px;text-transform:uppercase;letter-spacing:.5px}
+.btn{background:var(--brand);color:var(--brand-ink);border:0;border-radius:14px;padding:12px 16px;font-size:16px;font-weight:600}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
-.btn.small{padding:8px 12px;font-size:15.5px}
+.btn.small{padding:8px 12px;font-size:14px}
 .btn.danger-solid{background:var(--bad);color:#fff}
 .btn.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
 
 /* barra inferior */
 .tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:flex-end;background:var(--card);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));border-radius:24px 24px 0 0;box-shadow:0 -8px 24px rgba(11,31,75,.08)}
-.tabbar button{flex:1;background:none;border:0;color:var(--mute);font-size:12.5px;padding:6px 0 2px}
+.tabbar button{flex:1;background:none;border:0;color:var(--mute);font-size:11px;padding:6px 0 2px}
 .tabbar button svg{display:block;margin:0 auto 2px;width:24px;height:24px}
 .tabbar button.on{color:var(--brand);font-weight:700}
 .tabbar button.add{flex:none;width:58px;height:58px;margin:0 8px;margin-top:-26px;border-radius:50%;background:linear-gradient(160deg,var(--navy2),var(--navy));color:#fff;padding:0;box-shadow:0 8px 20px rgba(11,31,75,.35);display:grid;place-items:center}
@@ -74,17 +74,17 @@ h2 .ic{width:20px;height:20px}
 
 .overlay{position:fixed;inset:0;background:rgba(5,12,30,.5);display:flex;align-items:flex-end;justify-content:center;z-index:10}
 .sheet{background:var(--card);width:100%;max-width:640px;border-radius:26px 26px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
-.sheet label{display:block;font-size:14.5px;color:var(--mute);margin:10px 0 4px}
+.sheet label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
 .ia{background:var(--bg);border:1px dashed var(--line);border-radius:16px;padding:12px;margin-bottom:6px}
 .ia .row{margin-top:8px}.ia .row .btn{flex:none}
-.sheet textarea{width:100%;font:inherit;font-size:18px;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin-top:6px;resize:vertical}
-.login label{display:block;font-size:13.5px;color:var(--mute);margin:10px 0 4px}
-.login input{width:100%;font-size:19px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.sheet textarea{width:100%;font:inherit;font-size:16px;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin-top:6px;resize:vertical}
+.login label{display:block;font-size:12px;color:var(--mute);margin:10px 0 4px}
+.login input{width:100%;font-size:17px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .tabbar[hidden]{display:none}
-.sheet input,.sheet select{width:100%;font-size:19px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.sheet input,.sheet select{width:100%;font-size:17px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .sheet .row{margin-top:16px}.sheet .row .btn{flex:1}
-input.plain{width:110px;font-size:18px;padding:8px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);text-align:right}
+input.plain{width:110px;font-size:16px;padding:8px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);text-align:right}
 .empty{text-align:center;color:var(--mute);padding:28px 12px}
 .tip{background:color-mix(in srgb,var(--accent) 10%,var(--card));border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
-#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;font-size:15.5px;white-space:nowrap}
+#toast{position:fixed;left:50%;bottom:calc(100px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20;font-size:14px;white-space:nowrap}
 #toast.on{opacity:1}
