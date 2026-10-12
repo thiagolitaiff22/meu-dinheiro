@@ -50,7 +50,7 @@ const catBubble = c => {
 const soma = (arr, f) => arr.reduce((t, x) => t + f(x), 0);
 
 /* ---------- estado ---------- */
-const vazio = () => ({ renda: 0, saldoInicial: 0, entradas: [], gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
+const vazio = () => ({ renda: 0, saldoInicial: 0, bancos: [], entradas: [], gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
 const FORMAS = { boleto: 'Boleto', pix: 'Pix', cartao: 'Cartão', debito: 'Débito automático', dinheiro: 'Dinheiro' };
 function carregar() {
   try { return Object.assign(vazio(), JSON.parse(localStorage.getItem(KEY))); } catch (e) { return vazio(); }
@@ -276,24 +276,55 @@ const restante = d => Math.max(0, d.total - soma(d.pagamentos || [], p => p.valo
 const dividasAbertas = () => S.dividas.filter(d => restante(d) > 0.004).sort((a, b) => restante(a) - restante(b));
 
 // Saldo = dinheiro informado + entradas - todos os gastos lançados (excluir um gasto devolve o valor).
-const saldoAtual = () => (S.saldoInicial || 0) + soma(S.entradas || [], e => e.valor) - soma(S.gastos, g => g.valor);
-function formSaldo() {
-  sheet('Ajustar saldo',
-    `<div class="mute">Quanto você tem disponível agora?</div>` + campo('Saldo atual (R$)', 'valor', { mode: 'decimal', value: String(Math.round(saldoAtual() * 100) / 100).replace('.', ',') }),
+const COR_BANCO = ['#cc092f', '#8a05be', '#ec7000', '#0b6bcb', '#1a8f5c', '#c2185b'];
+const temBanco = id => !!id && S.bancos.some(b => b.id === id);
+const doBucket = id => m => (id ? m.banco === id : !temBanco(m.banco));
+function saldoDe(id) {
+  const base = id ? ((S.bancos.find(b => b.id === id) || {}).saldoInicial || 0) : (S.saldoInicial || 0);
+  const f = doBucket(id);
+  return base + soma((S.entradas || []).filter(f), e => e.valor) - soma(S.gastos.filter(f), g => g.valor);
+}
+const saldoAtual = () => saldoDe(null) + soma(S.bancos, b => saldoDe(b.id));
+const fmtIn = v => String(Math.round(v * 100) / 100).replace('.', ',');
+const opcoesBanco = () => [['', 'Sem conta (dinheiro)'], ...S.bancos.map(b => [b.id, b.nome])];
+const bancoTxt = id => { const b = S.bancos.find(x => x.id === id); return b ? ` · ${esc(b.nome)}` : ''; };
+function formSaldo(bancoId = '') {
+  const el = sheet('Ajustar saldo',
+    (S.bancos.length ? selecao('Conta', 'banco', opcoesBanco(), bancoId) : '') +
+    campo('Quanto tem agora (R$)', 'valor', { mode: 'decimal', value: fmtIn(saldoDe(bancoId || null)) }),
     f => {
-      S.saldoInicial = num(f.valor) + soma(S.gastos, g => g.valor) - soma(S.entradas || [], e => e.valor);
+      const id = f.banco || '';
+      const fn = doBucket(id || null);
+      const mov = soma((S.entradas || []).filter(fn), e => e.valor) - soma(S.gastos.filter(fn), g => g.valor);
+      const base = num(f.valor) - mov;
+      if (id && temBanco(id)) S.bancos.find(b => b.id === id).saldoInicial = base; else S.saldoInicial = base;
       toast('Saldo ajustado');
+    });
+  const sel = el.querySelector('[name=banco]');
+  if (sel) sel.addEventListener('change', () => { el.querySelector('[name=valor]').value = fmtIn(saldoDe(sel.value || null)); });
+}
+function formBanco(id) {
+  const b = id ? S.bancos.find(x => x.id === id) : null;
+  sheet(b ? 'Editar conta' : 'Nova conta bancária',
+    campo('Nome', 'nome', { value: b ? b.nome : '', ph: 'Ex.: Bradesco, Nubank, Carteira' }) +
+    campo('Saldo atual (R$)', 'valor', { mode: 'decimal', value: b ? fmtIn(saldoDe(b.id)) : '', ph: '0,00' }),
+    f => {
+      if (!f.nome.trim()) { toast('Informe o nome'); return false; }
+      if (b) { const mov = saldoDe(b.id) - b.saldoInicial; b.nome = f.nome.trim(); b.saldoInicial = num(f.valor) - mov; }
+      else S.bancos.push({ id: uid(), nome: f.nome.trim(), saldoInicial: num(f.valor) });
+      toast('Conta salva');
     });
 }
 function formEntrada() {
   sheet('Entrou dinheiro',
     campo('Valor (R$)', 'valor', { mode: 'decimal', ph: '0,00' }) +
     campo('Descrição', 'descricao', { ph: 'Ex.: salário, pix recebido...' }) +
+    (S.bancos.length ? selecao('Entrou em qual conta?', 'banco', opcoesBanco(), S.bancos[0].id) : '') +
     campo('Data', 'data', { type: 'date', value: hoje() }), f => {
     const v = num(f.valor);
     if (v <= 0) { toast('Informe um valor'); return false; }
     S.entradas = S.entradas || [];
-    S.entradas.push({ id: uid(), valor: v, descricao: f.descricao.trim() || 'Entrada', data: f.data || hoje() });
+    S.entradas.push({ id: uid(), valor: v, descricao: f.descricao.trim() || 'Entrada', banco: f.banco || '', data: f.data || hoje() });
     toast(`+${R(v)} no saldo`);
   }, 'Adicionar');
 }
@@ -345,6 +376,16 @@ function vInicio() {
     <div class="pcard" data-act="ir" data-tab="metas"><div class="row between"><span class="pico">${ic('target')}</span><span class="badge">${S.metas.length}</span></div><div class="mute">Metas</div><b>${S.metas.length ? media + '%' : '—'}</b></div>
   </div>`;
 
+  const sem = saldoDe(null);
+  h += `<div class="card"><div class="row between"><h2 style="margin:0">Contas</h2><button class="btn small" data-act="novoBanco">Adicionar conta</button></div>`;
+  if (!S.bancos.length) h += `<div class="mute" style="margin-top:6px">Cadastre seus bancos para ver o saldo de cada um. Tudo manual, sem vínculo automático.</div>`;
+  S.bancos.forEach((b, i) => {
+    const v = saldoDe(b.id), cor = COR_BANCO[i % COR_BANCO.length];
+    h += `<div class="item" data-act="editBanco" data-id="${b.id}"><span class="emoji" style="color:${cor};background:color-mix(in srgb,${cor} 14%,var(--card))"><b>${esc(b.nome.slice(0, 1).toUpperCase())}</b></span><div class="grow"><b>${esc(b.nome)}</b></div><b class="${v < 0 ? 'neg' : 'pos'}">${R(v)}</b></div>`;
+  });
+  if (S.bancos.length && Math.abs(sem) > 0.004) h += `<div class="item"><span class="emoji">${ic('tag')}</span><div class="grow"><b>Sem conta / dinheiro</b></div><b class="${sem < 0 ? 'neg' : 'pos'}">${R(sem)}</b></div>`;
+  h += `<div class="row between" style="padding-top:8px;border-top:1px solid var(--line)"><span class="mute">Total</span><b>${R(saldo)}</b></div></div>`;
+
   h += `<div class="card" data-act="ir" data-tab="mensal"><div class="row between"><h2 style="margin:0">Próximos vencimentos</h2><span class="mute">ver todas ›</span></div>`;
   if (!pc.length) h += `<div class="mute" style="margin-top:6px">${S.contas.length ? 'Tudo pago neste mês.' : 'Nenhuma conta fixa cadastrada.'}</div>`;
   pc.slice(0, 4).forEach(c => {
@@ -387,11 +428,12 @@ function formGasto() {
     selecao('Categoria', 'categoria', CATS.map(c => [c[1], c[1]]), 'Alimentação') +
     selecao('Foi...', 'tipo', Object.entries(TIPOS), 'necessario') +
     selecao('Custo', 'custo', [['variavel', 'Variável (muda todo mês)'], ['fixo', 'Fixo (igual todo mês)']], 'variavel') +
+    (S.bancos.length ? selecao('Saiu de qual conta?', 'banco', opcoesBanco(), S.bancos[0].id) : '') +
     campo('Data', 'data', { type: 'date', value: hoje() }),
     f => {
       const valor = num(f.valor);
       if (valor <= 0) { toast('Informe um valor'); return false; }
-      S.gastos.push({ id: uid(), valor, descricao: f.descricao.trim() || f.categoria, categoria: f.categoria, tipo: f.tipo, custo: f.custo || 'variavel', data: f.data || hoje() });
+      S.gastos.push({ id: uid(), valor, descricao: f.descricao.trim() || f.categoria, categoria: f.categoria, tipo: f.tipo, custo: f.custo || 'variavel', banco: f.banco || '', data: f.data || hoje() });
       if (!f.data || !f.data.startsWith(mes)) mes = (f.data || hoje()).slice(0, 7);
       toast('Gasto salvo');
     });
@@ -417,10 +459,10 @@ function vGastos() {
     }
     if (x.k === 'e') {
       h += `<div class="item" data-act="delEntrada" data-id="${x.id}"><span class="emoji" style="color:#22a35a;background:color-mix(in srgb,#22a35a 14%,var(--card))">${ic('arrowup')}</span>
-        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">Receita</div></div><b class="pos">+${R(x.valor)}</b></div>`;
+        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">Receita${bancoTxt(x.banco)}</div></div><b class="pos">+${R(x.valor)}</b></div>`;
     } else {
       h += `<div class="item" data-act="delGasto" data-id="${x.id}">${catBubble(x.categoria)}
-        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span>${ehFixo(x) ? '<span class="chip">Fixo</span>' : ''}</div></div>
+        <div class="grow"><div>${esc(x.descricao)}</div><div class="mute">${esc(x.categoria)}${bancoTxt(x.banco)}<span class="chip ${x.tipo}">${TIPOS[x.tipo] || ''}</span>${ehFixo(x) ? '<span class="chip">Fixo</span>' : ''}</div></div>
         <b class="neg">−${R(x.valor)}</b></div>`;
     }
   });
@@ -435,11 +477,12 @@ function formConta() {
     campo('Valor mensal (R$)', 'valor', { mode: 'decimal', ph: '0,00' }) +
     campo('Dia do vencimento (1 a 31)', 'dia', { mode: 'numeric', ph: '10' }) +
     selecao('Forma de pagamento', 'forma', Object.entries(FORMAS), 'boleto') +
-    selecao('Categoria', 'categoria', CATS.map(c => [c[1], c[1]]), 'Transporte'),
+    selecao('Categoria', 'categoria', CATS.map(c => [c[1], c[1]]), 'Transporte') +
+    (S.bancos.length ? selecao('Pagar com', 'banco', opcoesBanco(), S.bancos[0].id) : ''),
     f => {
       const valor = num(f.valor), dia = Math.round(num(f.dia));
       if (!f.nome.trim() || valor <= 0 || dia < 1 || dia > 31) { toast('Confira nome, valor e dia (1 a 31)'); return false; }
-      S.contas.push({ id: uid(), nome: f.nome.trim(), valor, dia, forma: f.forma, categoria: f.categoria, pagos: {} });
+      S.contas.push({ id: uid(), nome: f.nome.trim(), valor, dia, forma: f.forma, categoria: f.categoria, banco: f.banco || '', pagos: {} });
     });
 }
 function formDivida() {
@@ -579,6 +622,9 @@ function vMais() {
     <div class="item" data-act="ir" data-tab="dividas"><span class="emoji" style="color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--card))">${ic('trend')}</span><div class="grow"><b>Dívidas</b><div class="mute" style="font-size:12px">Quanto falta e ordem de quitação</div></div><span class="mute">›</span></div>
     <div class="item" data-act="ir" data-tab="metas"><span class="emoji" style="color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,var(--card))">${ic('target')}</span><div class="grow"><b>Metas</b><div class="mute" style="font-size:12px">Quanto já juntou e quanto falta</div></div><span class="mute">›</span></div>
   </div>`;
+  h += `<div class="card"><div class="row between"><h2 style="margin:0">Contas bancárias</h2><button class="btn small" data-act="novoBanco">Adicionar</button></div>` +
+    (S.bancos.length ? S.bancos.map(b => `<div class="item"><div class="grow"><b>${esc(b.nome)}</b><div class="mute" style="font-size:12px">${R(saldoDe(b.id))}</div></div><button class="btn small ghost" data-act="editBanco" data-id="${b.id}">Editar</button><button class="btn small danger" data-act="delBanco" data-id="${b.id}">Excluir</button></div>`).join('')
+      : `<div class="mute" style="margin-top:6px">Nenhuma conta cadastrada. Os saldos são lançados à mão, sem vínculo com o banco.</div>`) + `</div>`;
   h += `<div class="card"><h2>Renda mensal</h2><div class="row between"><span class="mute">Quanto entra por mês</span><input class="plain" inputmode="decimal" data-act="renda" value="${S.renda ? String(S.renda).replace('.', ',') : ''}" placeholder="0,00"></div></div>`;
   h += `<div class="card"><h2>Limite por categoria</h2><div class="mute" style="margin-bottom:6px">Deixe em branco para não limitar.</div>`;
   CATS.forEach(([, c]) => {
@@ -624,6 +670,13 @@ $('#app').addEventListener('click', async e => {
     case 'novoGasto': formGasto(); break;    case 'novaDivida': formDivida(); break;
     case 'novaConta': formConta(); break;
     case 'ajustarSaldo': formSaldo(); break;
+    case 'novoBanco': formBanco(); break;
+    case 'editBanco': formBanco(id); break;
+    case 'delBanco': {
+      const b = S.bancos.find(x => x.id === id);
+      if (b && await confirmar(`Excluir a conta "${b.nome}"? Os lançamentos ficam em "Sem conta".`)) { S.bancos = S.bancos.filter(x => x.id !== id); salvar(); render(); }
+      break;
+    }
     case 'delEntrada': {
       const i = (S.entradas || []).findIndex(x => x.id === id), en = S.entradas[i];
       if (en && await confirmar(`Excluir a receita "${en.descricao}" (${R(en.valor)})?`)) { S.entradas.splice(i, 1); salvar(); render(); }
@@ -639,7 +692,7 @@ $('#app').addEventListener('click', async e => {
     case 'pagarConta': {
       const c = S.contas.find(x => x.id === id); if (!c || paga(c)) break;
       const dia = Math.min(c.dia, 28);
-      const g = { id: uid(), valor: c.valor, descricao: c.nome, categoria: c.categoria || 'Outros', tipo: 'necessario', data: hoje().startsWith(mes) ? hoje() : `${mes}-${p2(dia)}`, conta: c.id };
+      const g = { id: uid(), valor: c.valor, descricao: c.nome, categoria: c.categoria || 'Outros', tipo: 'necessario', data: hoje().startsWith(mes) ? hoje() : `${mes}-${p2(dia)}`, conta: c.id, banco: c.banco || '' };
       S.gastos.push(g); c.pagos = c.pagos || {}; c.pagos[mes] = g.id;
       salvar(); render(); toast(`Paga: −${R(c.valor)} lançado nos gastos`);
       break;

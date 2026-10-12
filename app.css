@@ -116,3 +116,23 @@ input.plain{width:110px;font-size:16px;padding:8px;border-radius:12px;border:1px
 .pico{width:30px;height:30px;border-radius:10px;background:color-mix(in srgb,var(--accent) 14%,var(--card));color:var(--accent);display:grid;place-items:center}
 .pico .ic{width:18px;height:18px}
 .tabbar button{padding-left:0;padding-right:0}
+
+/* ---- visual limpo: menos caixas e bolinhas ---- */
+.card{background:transparent;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;padding:12px 0;margin-bottom:0}
+.wrap>.card:first-of-type{border-top:0}
+.card.tip{background:transparent;border-color:var(--line)}
+.card .card{border:0;padding:0}
+.emoji{background:transparent!important;width:26px;height:26px;border-radius:0}
+.emoji .ic{width:20px;height:20px}
+.chip{border:0;padding:0;margin-left:6px;border-radius:0;background:none}
+.chip::before{content:"· "}
+.badge{display:none}
+.pico{background:transparent;width:auto;height:auto;border-radius:0}
+.circ{background:none!important;width:auto;height:auto;border-radius:0}
+.circ.up{color:#7ee2a8}.circ.down{color:#ffa89b}
+.circ .ic{width:22px;height:22px}
+.mini{background:transparent;border:0;box-shadow:none;border-radius:0;padding:4px 0}
+.pcard{background:transparent;border:0;border-left:1px solid var(--line);box-shadow:none;border-radius:0;padding:2px 14px;flex:0 0 130px}
+.hscroll .pcard:first-child{border-left:0;padding-left:0}
+.day{margin:12px 0 2px}
+.hbtn{border-radius:10px}
