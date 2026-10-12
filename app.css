@@ -78,6 +78,9 @@ h2 .ic{width:20px;height:20px}
 .ia{background:var(--bg);border:1px dashed var(--line);border-radius:16px;padding:12px;margin-bottom:6px}
 .ia .row{margin-top:8px}.ia .row .btn{flex:none}
 .sheet textarea{width:100%;font:inherit;font-size:18px;padding:10px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);margin-top:6px;resize:vertical}
+.login label{display:block;font-size:13.5px;color:var(--mute);margin:10px 0 4px}
+.login input{width:100%;font-size:19px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.tabbar[hidden]{display:none}
 .sheet input,.sheet select{width:100%;font-size:19px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .sheet .row{margin-top:16px}.sheet .row .btn{flex:1}
 input.plain{width:110px;font-size:18px;padding:8px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);text-align:right}

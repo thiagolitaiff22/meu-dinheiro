@@ -46,7 +46,8 @@ const catBubble = c => {
 const soma = (arr, f) => arr.reduce((t, x) => t + f(x), 0);
 
 /* ---------- estado ---------- */
-const vazio = () => ({ renda: 0, gastos: [], orcamentos: {}, dividas: [], metas: [] });
+const vazio = () => ({ renda: 0, gastos: [], orcamentos: {}, dividas: [], metas: [], contas: [] });
+const FORMAS = { boleto: 'Boleto', pix: 'Pix', cartao: 'Cartão', debito: 'Débito automático', dinheiro: 'Dinheiro' };
 function carregar() {
   try { return Object.assign(vazio(), JSON.parse(localStorage.getItem(KEY))); } catch (e) { return vazio(); }
 }
@@ -54,8 +55,72 @@ let S = carregar();
 let tab = 'inicio';
 let mes = hoje().slice(0, 7);
 
+/* ---------- nuvem (Supabase) ---------- */
+const sb = (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY)
+  ? window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: true } })
+  : null;
+let user = null, pendente = false, tSync = null;
+
+async function enviarNuvem() {
+  const { error } = await sb.from('app_state').upsert({ user_id: user.id, data: S, updated_at: new Date().toISOString() });
+  pendente = !!error;
+  return !error;
+}
+async function carregarNuvem() {
+  const { data, error } = await sb.from('app_state').select('data').eq('user_id', user.id).maybeSingle();
+  if (error) { toast('Sem conexão com a nuvem; usando a cópia do aparelho'); return; }
+  if (data && data.data && Object.keys(data.data).length) {
+    S = Object.assign(vazio(), data.data);
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (_) {}
+  } else {
+    await enviarNuvem();
+  }
+}
+
 function salvar() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { toast('Não consegui salvar os dados'); }
+  if (sb && user) {
+    pendente = true;
+    clearTimeout(tSync);
+    tSync = setTimeout(async () => { if (!(await enviarNuvem())) toast('Sem conexão: guardei no aparelho e envio depois'); }, 500);
+  }
+}
+window.addEventListener('online', () => { if (sb && user && pendente) enviarNuvem(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && sb && user && !pendente) carregarNuvem().then(render);
+});
+
+function telaLogin(msg = '') {
+  document.querySelector('.tabbar').hidden = true;
+  $('#app').innerHTML = `<header class="hero"><div class="hi">Meu Dinheiro</div><div class="sub" style="text-transform:none">Entre uma única vez. Depois o iPhone lembra de você.</div></header>
+    <div class="wrap"><div class="card login">
+      <label>E-mail<input id="em" type="email" autocomplete="username" inputmode="email"></label>
+      <label>Senha (mínimo 6 caracteres)<input id="pw" type="password" autocomplete="current-password"></label>
+      <div id="lmsg" class="neg" style="min-height:22px;margin-top:8px">${esc(msg)}</div>
+      <div class="row" style="margin-top:8px"><button class="btn grow" data-login="in">Entrar</button><button class="btn ghost grow" data-login="up">Criar conta</button></div>
+      <div class="mute" style="margin-top:12px">Primeira vez? Toque em "Criar conta".</div>
+    </div></div>`;
+}
+async function entrar(tipo) {
+  const email = $('#em').value.trim(), senha = $('#pw').value, out = $('#lmsg');
+  if (!email || senha.length < 6) { out.textContent = 'Informe o e-mail e uma senha de pelo menos 6 caracteres.'; return; }
+  out.textContent = 'Aguarde...';
+  const { data, error } = tipo === 'up' ? await sb.auth.signUp({ email, password: senha }) : await sb.auth.signInWithPassword({ email, password: senha });
+  if (error) { out.textContent = /invalid login/i.test(error.message) ? 'E-mail ou senha incorretos.' : error.message; return; }
+  if (!data.session) { out.textContent = 'Conta criada. Confirme o e-mail que o Supabase enviou e depois toque em Entrar.'; return; }
+  user = data.user;
+  document.querySelector('.tabbar').hidden = false;
+  render(); await carregarNuvem(); render();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-login]'); if (b && sb) entrar(b.dataset.login);
+});
+async function iniciar() {
+  if (!sb) { render(); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { telaLogin(); return; }
+  user = session.user;
+  render(); await carregarNuvem(); render();
 }
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('on');
@@ -197,6 +262,18 @@ const gastosDoMes = () => S.gastos.filter(g => g.data.startsWith(mes));
 const restante = d => Math.max(0, d.total - soma(d.pagamentos || [], p => p.valor));
 const dividasAbertas = () => S.dividas.filter(d => restante(d) > 0.004).sort((a, b) => restante(a) - restante(b));
 
+const paga = c => !!(c.pagos && c.pagos[mes]);
+function contaStatus(c) {
+  if (paga(c)) return { t: 'Paga', cls: 'pos' };
+  const [y, m] = mes.split('-').map(Number);
+  const dia = Math.min(c.dia, new Date(y, m, 0).getDate());
+  const venc = `${mes}-${p2(dia)}`, h = hoje();
+  if (venc < h) return { t: `Atrasada (venceu dia ${p2(dia)})`, cls: 'neg' };
+  if (venc === h) return { t: 'Vence hoje', cls: 'neg' };
+  const dias = Math.round((new Date(venc) - new Date(h)) / 864e5);
+  return dias <= 5 ? { t: `Vence em ${dias} dia(s)`, cls: 'neg' } : { t: `Vence dia ${p2(dia)}`, cls: 'mute' };
+}
+
 /* ---------- telas ---------- */
 function vInicio() {
   const g = gastosDoMes();
@@ -235,6 +312,10 @@ function vInicio() {
   });
   h += `</div>`;
 
+  if (S.contas.length) {
+    const pc = S.contas.filter(c => !paga(c));
+    h += `<div class="card" data-act="ir" data-tab="dividas"><div class="row between"><div><div class="mute">Contas fixas a pagar</div><div class="big">${R(soma(pc, c => c.valor))}</div></div><div class="mute">${pc.length} pendente(s) ›</div></div></div>`;
+  }
   h += `<div class="card" data-act="ir" data-tab="dividas"><div class="row between"><div><div class="mute">Dívidas em aberto</div><div class="big">${R(totalDiv)}</div></div><div class="mute">${abertas.length} dívida(s) ›</div></div></div>`;
 
   if (S.metas.length) {
@@ -286,6 +367,19 @@ function vGastos() {
   return h;
 }
 
+function formConta() {
+  sheet('Nova conta fixa',
+    campo('Nome', 'nome', { ph: 'Ex.: Carro' }) +
+    campo('Valor mensal (R$)', 'valor', { mode: 'decimal', ph: '0,00' }) +
+    campo('Dia do vencimento (1 a 31)', 'dia', { mode: 'numeric', ph: '10' }) +
+    selecao('Forma de pagamento', 'forma', Object.entries(FORMAS), 'boleto') +
+    selecao('Categoria', 'categoria', CATS.map(c => [c[1], c[1]]), 'Transporte'),
+    f => {
+      const valor = num(f.valor), dia = Math.round(num(f.dia));
+      if (!f.nome.trim() || valor <= 0 || dia < 1 || dia > 31) { toast('Confira nome, valor e dia (1 a 31)'); return false; }
+      S.contas.push({ id: uid(), nome: f.nome.trim(), valor, dia, forma: f.forma, categoria: f.categoria, pagos: {} });
+    });
+}
 function formDivida() {
   sheet('Nova dívida',
     campo('Nome', 'nome', { ph: 'Ex.: Cartão Nubank' }) +
@@ -314,7 +408,18 @@ function formPagamento(id) {
 function vDividas() {
   const todas = [...S.dividas].sort((a, b) => restante(a) - restante(b));
   const abertas = dividasAbertas();
-  let h = heroSmall('Dívidas');
+  const pend = S.contas.filter(c => !paga(c));
+  let h = heroSmall('Contas e dívidas', mnav());
+  h += `<div class="card"><div class="row between"><h2 style="margin:0">Contas fixas do mês</h2><button class="btn small" data-act="novaConta">Nova conta</button></div>`;
+  if (!S.contas.length) h += `<div class="empty">Cadastre contas que se repetem todo mês (carro, aluguel, internet...).</div>`;
+  else h += `<div class="mute" style="margin-top:6px">A pagar: <b>${R(soma(pend, c => c.valor))}</b> em ${pend.length} conta(s)</div>`;
+  [...S.contas].sort((a, b) => a.dia - b.dia).forEach(c => {
+    const st = contaStatus(c);
+    h += `<div class="item" style="flex-wrap:wrap"><div class="grow"><b>${esc(c.nome)}</b><div class="mute">${esc(FORMAS[c.forma] || '')} · todo dia ${p2(c.dia)}</div></div>
+      <div style="text-align:right"><b>${R(c.valor)}</b><div class="${st.cls}" style="font-size:13.5px">${esc(st.t)}</div></div>
+      <div class="row" style="width:100%">${paga(c) ? `<button class="btn small ghost" data-act="desfazerConta" data-id="${c.id}">Desfazer pagamento</button>` : `<button class="btn small" data-act="pagarConta" data-id="${c.id}">Marcar como paga</button>`}<button class="btn small danger" data-act="delConta" data-id="${c.id}">Excluir</button></div></div>`;
+  });
+  h += `</div>`;
   h += `<div class="card"><div class="mute">Total a pagar</div><div class="big">${R(soma(abertas, restante))}</div>
     <div class="mute">Parcelas somam ${R(soma(abertas, d => d.parcela))} por mês</div></div>`;
   if (abertas.length > 1) {
@@ -381,6 +486,9 @@ function vMais() {
   h += `</div>`;
   h += `<div class="card"><h2>IA (voz e recibos)</h2><div class="mute" style="margin-bottom:10px">Cole sua chave da API da Anthropic. Ela fica só neste aparelho. O texto e a foto do recibo são enviados à Anthropic para serem interpretados.</div>
     <div class="row"><input class="plain grow" style="width:auto;text-align:left" type="password" autocomplete="off" data-act="chave" value="${esc(chaveIA())}" placeholder="sk-ant-..."></div></div>`;
+  h += `<div class="card"><h2>Conta</h2>${sb && user
+    ? `<div class="mute" style="margin-bottom:10px">Dados guardados na nuvem, na conta <b>${esc(user.email || '')}</b>.</div><button class="btn small danger" data-act="sair">Sair</button>`
+    : `<div class="mute">Modo local: os dados ficam só neste aparelho.</div>`}</div>`;
   h += `<div class="card"><h2>Backup</h2><div class="mute" style="margin-bottom:10px">Seus dados ficam só neste iPhone. Exporte de vez em quando para não perder nada.</div>
     <div class="row"><button class="btn small" data-act="exportar">Exportar</button><button class="btn small ghost" data-act="importar">Restaurar</button></div></div>`;
   h += `<div class="card"><button class="btn danger" data-act="apagar">Apagar todos os dados</button></div>`;
@@ -412,8 +520,33 @@ $('#app').addEventListener('click', async e => {
   switch (act) {
     case 'mes': mes = mesMove(mes, +el.dataset.n); render(); break;
     case 'ir': ir(el.dataset.tab); break;
-    case 'novoGasto': formGasto(); break;
-    case 'novaDivida': formDivida(); break;
+    case 'novoGasto': formGasto(); break;    case 'novaDivida': formDivida(); break;
+    case 'novaConta': formConta(); break;
+    case 'sair':
+      if (await confirmar('Sair da conta? Seus dados continuam na nuvem.', 'Sair')) {
+        await sb.auth.signOut(); try { localStorage.removeItem(KEY); } catch (_) {}
+        S = vazio(); user = null; telaLogin();
+      }
+      break;
+    case 'pagarConta': {
+      const c = S.contas.find(x => x.id === id); if (!c || paga(c)) break;
+      const dia = Math.min(c.dia, 28);
+      const g = { id: uid(), valor: c.valor, descricao: c.nome, categoria: c.categoria || 'Outros', tipo: 'necessario', data: hoje().startsWith(mes) ? hoje() : `${mes}-${p2(dia)}`, conta: c.id };
+      S.gastos.push(g); c.pagos = c.pagos || {}; c.pagos[mes] = g.id;
+      salvar(); render(); toast('Conta paga e lançada nos gastos');
+      break;
+    }
+    case 'desfazerConta': {
+      const c = S.contas.find(x => x.id === id); if (!c || !paga(c)) break;
+      S.gastos = S.gastos.filter(g => g.id !== c.pagos[mes]); delete c.pagos[mes];
+      salvar(); render(); toast('Pagamento desfeito');
+      break;
+    }
+    case 'delConta': {
+      const c = S.contas.find(x => x.id === id);
+      if (c && await confirmar(`Excluir a conta fixa "${c.nome}"? Os gastos já lançados ficam.`)) { S.contas = S.contas.filter(x => x.id !== id); salvar(); render(); }
+      break;
+    }
     case 'novaMeta': formMeta(); break;
     case 'pagar': formPagamento(id); break;
     case 'aporte': formAporte(id); break;
@@ -456,7 +589,7 @@ $('#app').addEventListener('change', e => {
   else if (el.dataset.act === 'orc') { const v = num(el.value); if (v > 0) S.orcamentos[el.dataset.cat] = v; else delete S.orcamentos[el.dataset.cat]; salvar(); toast('Limite salvo'); }
 });
 
-render();
+iniciar();
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
