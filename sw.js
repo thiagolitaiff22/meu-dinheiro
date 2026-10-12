@@ -1,5 +1,5 @@
-const V = 'meudinheiro-v12';
-const FILES = ['./', 'index.html', 'app.css', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+const V = 'meudinheiro-v13';
+const FILES = ['./', 'index.html', 'app.css', 'config.js', 'core.js', 'ia.js', 'dm.js', 'views.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
@@ -17,4 +17,3 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(e.request).then(r => r || caches.match('index.html')))
   );
 });
-
