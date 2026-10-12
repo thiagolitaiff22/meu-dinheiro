@@ -314,52 +314,45 @@ function vInicio() {
   const abertas = dividasAbertas();
   const totalDiv = soma(abertas, restante);
 
-  let h = `<header class="hero"><div class="row between"><div><div class="hi">Olá!</div><div class="sub">Seu dinheiro em ${esc(mesNome(mes))}</div></div>${gearBtn()}</div>
-    ${mnav()}
-    <div class="hl">Saldo disponível</div>
+  let h = `<header class="hero"><div class="row between"><div class="hl" style="margin:0">Saldo disponível</div>${gearBtn()}</div>
     <div class="hbig ${saldo < 0 ? 'neg' : ''}">${R(saldo)}</div>
-    <div class="sub" style="margin-top:2px">Cada conta paga ou gasto lançado desconta daqui.</div>
-    <div class="pills"><div class="pill"><span>Gastos no mês</span><b>−${R(total)}</b></div><div class="pill"><span>Contas a pagar</span><b>${R(previstoFixo)}</b></div></div>
-    <div class="row" style="margin-top:12px"><button class="hbtn" data-act="entrada">+ Entrou dinheiro</button><button class="hbtn" data-act="ajustarSaldo">Ajustar saldo</button></div>
+    <div class="row" style="margin-top:10px"><button class="hbtn" data-act="entrada">+ Entrou dinheiro</button><button class="hbtn" data-act="ajustarSaldo">Ajustar saldo</button></div>
   </header><!--w-->`;
+  h += mnav();
+  h += `<div class="grid2"><div class="mini"><span>Gastos no mês</span><b class="neg">−${R(total)}</b></div><div class="mini" data-act="ir" data-tab="mensal"><span>Contas a pagar</span><b>${R(previstoFixo)}</b></div></div>`;
+
+  const pc = S.contas.filter(c => !paga(c)).sort((a, b) => a.dia - b.dia);
+  h += `<div class="card" data-act="ir" data-tab="mensal"><div class="row between"><h2 style="margin:0">Próximos vencimentos</h2><span class="mute">ver todas ›</span></div>`;
+  if (!pc.length) h += `<div class="mute" style="margin-top:6px">${S.contas.length ? 'Tudo pago neste mês.' : 'Nenhuma conta fixa cadastrada.'}</div>`;
+  pc.slice(0, 4).forEach(c => {
+    const st = contaStatus(c);
+    h += `<div class="item"><div class="grow"><b>${esc(c.nome)}</b><div class="mute" style="font-size:12px">dia ${p2(c.dia)} · ${esc(FORMAS[c.forma] || '')}</div></div><div style="text-align:right"><b>${R(c.valor)}</b><div class="${st.cls}" style="font-size:12px">${esc(st.t)}</div></div></div>`;
+  });
+  h += `</div>`;
+
+  h += `<div class="card"><div class="row between"><h2 style="margin:0">Fixo × variável</h2><span class="mute">${total > 0 ? Math.round(fixo / total * 100) : 0}% fixo</span></div>
+    <div class="grid2" style="margin:8px 0 0"><div><div class="mute" style="font-size:12px">Fixo</div><b class="neg">−${R(fixo)}</b></div><div><div class="mute" style="font-size:12px">Variável</div><b class="neg">−${R(variavel)}</b></div></div>${total > 0 ? bar(fixo / total * 100) : ''}</div>`;
 
   if (bes + cor > 0) {
-    let msg = `Em ${esc(mesNome(mes))}: <b>${R(bes)}</b> em besteira e <b>${R(cor)}</b> que dava pra cortar.`;
-    if (abertas.length && bes > 0) {
-      const menor = abertas[0];
-      msg += ` Só a besteira já pagaria <b>${Math.min(100, Math.round(bes / restante(menor) * 100))}%</b> da dívida “${esc(menor.nome)}”.`;
-    }
-    h += `<div class="card tip"><h2 class="row" style="gap:8px"><span class="neg">${ic('alert')}</span>Para onde foi o dinheiro</h2><div>${msg}</div></div>`;
+    let msg = `<b>${R(bes)}</b> em besteira e <b>${R(cor)}</b> que dava pra cortar.`;
+    if (abertas.length && bes > 0) msg += ` A besteira pagaria <b>${Math.min(100, Math.round(bes / restante(abertas[0]) * 100))}%</b> da dívida “${esc(abertas[0].nome)}”.`;
+    h += `<div class="card tip"><div class="row" style="gap:8px"><span class="neg">${ic('alert')}</span><div style="font-size:13px">${msg}</div></div></div>`;
   }
 
   const porCat = {};
   g.forEach(x => porCat[x.categoria] = (porCat[x.categoria] || 0) + x.valor);
   const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]);
-  h += `<div class="card"><h2>Custo fixo × variável</h2>
-    <div class="row" style="gap:12px">
-      <div class="grow"><div class="mute">Fixo</div><div class="neg" style="font-size:18px;font-weight:700">−${R(fixo)}</div>${previstoFixo > 0 ? `<div class="mute" style="font-size:12px">ainda a pagar ${R(previstoFixo)}</div>` : ''}</div>
-      <div class="grow"><div class="mute">Variável</div><div class="neg" style="font-size:18px;font-weight:700">−${R(variavel)}</div></div>
-    </div>${total > 0 ? bar(fixo / total * 100) : ''}
-    <div class="mute" style="font-size:12px">${total > 0 ? `${Math.round(fixo / total * 100)}% do que você gastou é custo fixo` : 'Nenhum gasto neste mês'}</div></div>`;
   h += `<div class="card"><h2>Por categoria</h2>`;
-  if (!cats.length) h += `<div class="empty">Nenhum gasto neste mês.<br>Toque em Gastos e adicione o primeiro.</div>`;
-  cats.forEach(([c, v]) => {
+  if (!cats.length) h += `<div class="mute">Nenhum gasto neste mês.</div>`;
+  cats.slice(0, 5).forEach(([c, v]) => {
     const lim = S.orcamentos[c] || 0;
-    h += `<div style="margin-bottom:10px"><div class="row between"><span class="row grow" style="gap:10px">${catBubble(c)}${esc(c)}</span><span style="text-align:right;white-space:nowrap"><b>${R(v)}</b>${lim ? `<div class="mute" style="font-size:12px">de ${R(lim)}</div>` : ''}</span></div>${lim ? bar(v / lim * 100) : ''}</div>`;
+    h += `<div class="item" style="flex-wrap:wrap"><span class="row grow" style="gap:10px">${catBubble(c)}${esc(c)}</span><span style="text-align:right;white-space:nowrap"><b>${R(v)}</b>${lim ? `<span class="mute" style="font-size:12px"> / ${R(lim)}</span>` : ''}</span>${lim ? `<div style="width:100%">${bar(v / lim * 100)}</div>` : ''}</div>`;
   });
+  if (cats.length > 5) h += `<div class="mute" style="font-size:12px;text-align:center" data-act="ir" data-tab="mensal">+${cats.length - 5} categorias na aba Mensal ›</div>`;
   h += `</div>`;
 
-  if (S.contas.length) {
-    const pc = S.contas.filter(c => !paga(c));
-    h += `<div class="card" data-act="ir" data-tab="mensal"><div class="row between"><div><div class="mute">Contas fixas a pagar</div><div class="big">${R(soma(pc, c => c.valor))}</div></div><div class="mute">${pc.length} pendente(s) ›</div></div></div>`;
-  }
-  h += `<div class="card" data-act="ir" data-tab="dividas"><div class="row between"><div><div class="mute">Dívidas em aberto</div><div class="big">${R(totalDiv)}</div></div><div class="mute">${abertas.length} dívida(s) ›</div></div></div>`;
-
-  if (S.metas.length) {
-    h += `<div class="card" data-act="ir" data-tab="metas"><h2>Metas</h2>`;
-    S.metas.slice(0, 3).forEach(m => { const p = m.alvo ? m.atual / m.alvo * 100 : 0; h += `<div class="row between"><span>${esc(m.nome)}</span><span class="mute">${Math.round(p)}%</span></div>${bar(p)}`; });
-    h += `</div>`;
-  }
+  const media = S.metas.length ? Math.round(soma(S.metas, m => m.alvo ? m.atual / m.alvo * 100 : 0) / S.metas.length) : 0;
+  h += `<div class="grid2"><div class="mini" data-act="ir" data-tab="dividas"><span>Dívidas em aberto</span><b>${R(totalDiv)}</b><span>${abertas.length} dívida(s) ›</span></div><div class="mini" data-act="ir" data-tab="metas"><span>Metas</span><b>${S.metas.length ? media + '%' : '—'}</b><span>${S.metas.length} meta(s) ›</span></div></div>`;
   return h;
 }
 
