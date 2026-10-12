@@ -94,7 +94,7 @@ function telaLogin(msg = '') {
   document.querySelector('.tabbar').hidden = true;
   $('#app').innerHTML = `<header class="hero"><div class="hi">Meu Dinheiro</div><div class="sub" style="text-transform:none">Entre uma única vez. Depois o iPhone lembra de você.</div></header>
     <div class="wrap"><div class="card login">
-      <label>E-mail<input id="em" type="email" autocomplete="username" inputmode="email"></label>
+      <label>Usuário (ou e-mail)<input id="em" type="text" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
       <label>Senha (mínimo 6 caracteres)<input id="pw" type="password" autocomplete="current-password"></label>
       <div id="lmsg" class="neg" style="min-height:22px;margin-top:8px">${esc(msg)}</div>
       <div class="row" style="margin-top:8px"><button class="btn grow" data-login="in">Entrar</button><button class="btn ghost grow" data-login="up">Criar conta</button></div>
@@ -102,8 +102,10 @@ function telaLogin(msg = '') {
     </div></div>`;
 }
 async function entrar(tipo) {
-  const email = $('#em').value.trim(), senha = $('#pw').value, out = $('#lmsg');
-  if (!email || senha.length < 6) { out.textContent = 'Informe o e-mail e uma senha de pelo menos 6 caracteres.'; return; }
+  let email = $('#em').value.trim().toLowerCase();
+  const senha = $('#pw').value, out = $('#lmsg');
+  if (!email || senha.length < 6) { out.textContent = 'Informe o usuário e uma senha de pelo menos 6 caracteres.'; return; }
+  if (!email.includes('@')) email = `${email.replace(/[^a-z0-9._-]/g, '')}@meudinheiro.app`;
   out.textContent = 'Aguarde...';
   const { data, error } = tipo === 'up' ? await sb.auth.signUp({ email, password: senha }) : await sb.auth.signInWithPassword({ email, password: senha });
   if (error) { out.textContent = /invalid login/i.test(error.message) ? 'E-mail ou senha incorretos.' : error.message; return; }
